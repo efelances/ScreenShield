@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark" data-contrast="standard">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScreenShield</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <svg class="brand-icon" viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+          <polygon points="16,2 29,7.5 25.5,18.5 16,30 6.5,18.5 3,7.5" fill="#245C46" stroke="#1C1B19" stroke-width="2" />
+          <polyline points="10.5,16 14.5,20 21.5,11.5" fill="none" stroke="#F7F5F0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="brand-title">ScreenShield</span>
+        <span id="statusBadge" class="status-pill" data-i18n="status_standby"></span>
+      </div>
+
+      <div class="topbar-controls">
+        <div class="lang-group" role="group" aria-label="Language">
+          <button class="chip-btn" data-lang="tr">TR</button>
+          <button class="chip-btn" data-lang="en">EN</button>
+          <button class="chip-btn" data-lang="de">DE</button>
+          <button class="chip-btn" data-lang="es">ES</button>
+        </div>
+        <button id="themeToggleBtn" class="chip-btn" type="button" data-i18n="theme_light"></button>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="shield" role="tab" data-i18n="tab_shield"></button>
+      <button class="tab-btn" data-tab="rules" role="tab" data-i18n="tab_rules_zones"></button>
+      <button class="tab-btn" data-tab="settings" role="tab" data-i18n="tab_settings"></button>
+    </nav>
+
+    <main class="main-content">
+      <!-- TAB 1: KALKAN (MAIN) -->
+      <section id="tab-shield" class="tab-panel active">
+        <div class="hero-card card">
+          <div class="hero-top">
+            <div id="heroSummary" class="hero-summary"></div>
+            <div class="hero-actions">
+              <button id="shareToggleBtn" class="btn btn-primary btn-lg" type="button"></button>
+              <button id="panicBtn" class="btn btn-dark btn-lg" type="button"></button>
+            </div>
+          </div>
+
+          <div class="quick-bar">
+            <div class="segmented" role="group">
+              <button id="styleBlurBtn" class="seg-btn active" type="button" data-i18n="style_blur"></button>
+              <button id="styleSolidBtn" class="seg-btn" type="button" data-i18n="style_solid"></button>
+            </div>
+
+            <label class="inline-check">
+              <input id="focusAssistChk" type="checkbox" checked>
+              <span data-i18n="focus_assist_short"></span>
+            </label>
+
+            <button id="zoneOverlayToggleBtn" class="btn btn-outline" type="button" data-i18n="toggle_zone_overlays"></button>
+            <button id="sendBackBtn" class="btn btn-outline hidden" type="button" data-i18n="send_mirror_back"></button>
+          </div>
+        </div>
+
+        <!-- Default Direct Mode: Simple 1-click Open Windows List -->
+        <div id="directWindowsCard" class="card">
+          <div class="card-header">
+            <div>
+              <h2 data-i18n="direct_windows_title"></h2>
+              <p class="hint-text" data-i18n="direct_windows_desc"></p>
+            </div>
+            <button id="refreshDirectWindowsBtn" class="btn btn-outline" type="button" data-i18n="refresh_windows"></button>
+          </div>
+          <div id="directWindowsList" class="list-stack"></div>
+        </div>
+
+        <!-- Secondary Safe Mirror Mode (Shown ONLY if chosen in Settings) -->
+        <div id="mirrorSection" class="mirror-stack hidden">
+          <div class="card">
+            <div class="card-header">
+              <h2 data-i18n="mirror_preview_title"></h2>
+              <div class="segmented">
+                <button id="modeAllowlistBtn" class="seg-btn active" type="button" data-i18n="mode_allowlist"></button>
+                <button id="modeMonitorBtn" class="seg-btn" type="button" data-i18n="mode_monitor"></button>
+              </div>
+            </div>
+            <div class="preview-frame">
+              <img id="mirrorPreviewImg" alt="Safe Share Mirror" src="/api/mirror/preview.jpg">
+            </div>
+            <p class="hint-text" data-i18n="mirror_hint"></p>
+          </div>
+
+          <div id="allowlistCard" class="card">
+            <div class="card-header">
+              <div>
+                <h2 data-i18n="allowlist_title"></h2>
+                <p class="hint-text" data-i18n="allowlist_desc"></p>
+              </div>
+              <button id="refreshWindowsBtn" class="btn btn-outline" type="button" data-i18n="refresh_windows"></button>
+            </div>
+            <div id="windowsList" class="list-stack"></div>
+          </div>
+
+          <div id="monitorCard" class="card hidden">
+            <div class="card-header">
+              <h2 data-i18n="monitor_select_title"></h2>
+            </div>
+            <div id="monitorsList" class="monitor-grid"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: KURALLAR & BÖLGELER -->
+      <section id="tab-rules" class="tab-panel">
+        <div class="card">
+          <div class="card-header">
+            <h2 data-i18n="rules_list_title"></h2>
+            <span id="matchedWindowsSummary" class="tag"></span>
+          </div>
+          <form id="addRuleForm" class="form-grid">
+            <input id="ruleLabelInput" type="text" required data-i18n-placeholder="rule_label_ph">
+            <input id="rulePatternInput" type="text" required data-i18n-placeholder="rule_pattern_ph">
+            <select id="ruleMatchTypeSelect">
+              <option value="contains" data-i18n="match_contains"></option>
+              <option value="regex" data-i18n="match_regex"></option>
+            </select>
+            <button class="btn btn-primary" type="submit" data-i18n="add_rule_btn"></button>
+          </form>
+          <div id="rulesList" class="list-stack spacer-top"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 data-i18n="zone_canvas_title"></h2>
+              <p class="hint-text" data-i18n="zone_canvas_desc"></p>
+            </div>
+            <button id="zonesOverlayBtn2" class="btn btn-outline" type="button" data-i18n="toggle_zone_overlays"></button>
+          </div>
+          <div class="grid-two">
+            <div>
+              <div id="zoneCanvas" class="zone-canvas" aria-label="Static zone editor">
+                <div id="zoneDraftBox" class="zone-draft hidden"></div>
+              </div>
+              <div class="preset-row">
+                <button class="btn btn-outline preset-btn" data-preset="taskbar" type="button" data-i18n="preset_taskbar"></button>
+                <button class="btn btn-outline preset-btn" data-preset="bookmarks" type="button" data-i18n="preset_bookmarks"></button>
+                <button class="btn btn-outline preset-btn" data-preset="notifications" type="button" data-i18n="preset_notifications"></button>
+                <button class="btn btn-outline preset-btn" data-preset="sidebar" type="button" data-i18n="preset_sidebar"></button>
+              </div>
+            </div>
+            <div id="zonesList" class="list-stack"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: AYARLAR -->
+      <section id="tab-settings" class="tab-panel">
+        <div class="grid-two">
+          <div class="card">
+            <div class="card-header">
+              <h2 data-i18n="settings_mode_title"></h2>
+            </div>
+
+            <div class="setting-row">
+              <div>
+                <div class="setting-title" data-i18n="shield_mode_label"></div>
+              </div>
+              <div class="segmented">
+                <button id="shieldDirectBtn" class="seg-btn active" type="button" data-i18n="shield_direct"></button>
+                <button id="shieldMirrorBtn" class="seg-btn" type="button" data-i18n="shield_mirror"></button>
+              </div>
+            </div>
+
+            <div id="paddingRow" class="setting-row">
+              <div>
+                <div class="setting-title" data-i18n="padding_label"></div>
+              </div>
+              <div class="slider-wrap">
+                <input id="paddingRange" type="range" min="0" max="16" step="2" value="4">
+                <span id="paddingVal" class="mono-val">4 px</span>
+              </div>
+            </div>
+
+            <div id="bufferRow" class="setting-row hidden">
+              <div>
+                <div class="setting-title" data-i18n="buffer_delay_label"></div>
+              </div>
+              <div class="slider-wrap">
+                <input id="bufferDelayRange" type="range" min="0" max="300" step="25" value="150">
+                <span id="bufferDelayVal" class="mono-val">150 ms</span>
+              </div>
+            </div>
+
+            <label class="toggle-row">
+              <span class="setting-title" data-i18n="high_contrast"></span>
+              <input id="contrastToggleChk" type="checkbox">
+            </label>
+
+            <label class="toggle-row">
+              <span class="setting-title" data-i18n="hide_control_label"></span>
+              <input id="hideControlChk" type="checkbox" checked>
+            </label>
+
+            <label class="toggle-row">
+              <span class="setting-title" data-i18n="clipboard_guard_label"></span>
+              <input id="clipboardGuardChk" type="checkbox" checked>
+            </label>
+
+            <label class="toggle-row">
+              <span class="setting-title" data-i18n="clipboard_autoclear_label"></span>
+              <input id="clipboardAutoClearChk" type="checkbox">
+            </label>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2 data-i18n="hotkeys_title"></h2>
+            </div>
+            <form id="hotkeysForm" class="stack-form">
+              <div class="hotkey-row">
+                <label for="hkPanicInput" data-i18n="hotkey_panic"></label>
+                <input id="hkPanicInput" type="text" required>
+                <span id="hkPanicStatus" class="tag"></span>
+              </div>
+              <div class="hotkey-row">
+                <label for="hkShareInput" data-i18n="hotkey_share"></label>
+                <input id="hkShareInput" type="text" required>
+                <span id="hkShareStatus" class="tag"></span>
+              </div>
+              <div class="hotkey-row">
+                <label for="hkZonesInput" data-i18n="hotkey_zones"></label>
+                <input id="hkZonesInput" type="text" required>
+                <span id="hkZonesStatus" class="tag"></span>
+              </div>
+              <button class="btn btn-primary" type="submit" data-i18n="save_hotkeys_btn"></button>
+            </form>
+            <p class="hint-text spacer-top" data-i18n="security_summary"></p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 data-i18n="clipboard_alerts_title"></h2>
+            <button id="clearAlertsBtn" class="btn btn-outline" type="button" data-i18n="clear_alerts_btn"></button>
+          </div>
+          <div id="clipboardAlertsList" class="list-stack"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/i18n.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
