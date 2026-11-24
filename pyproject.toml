@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "screenshield"
+version = "0.1.0"
+description = "100% offline live privacy shield for screen sharing, streaming, and recording on Windows."
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pywebview>=5.3",
+    "pywin32>=306; sys_platform == 'win32'",
+    "mss>=9.0.0",
+    "pillow>=10.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "httpx>=0.27.0",
+    "pyinstaller>=6.10.0",
+]
+
+[project.scripts]
+screenshield = "screenshield.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["screenshield*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
