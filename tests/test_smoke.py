@@ -9,10 +9,10 @@ from screenshield.core.hotkeys import parse_hotkey
 
 
 def test_package_version_and_cli(capsys):
-    assert screenshield.__version__ == "0.1.0"
+    assert screenshield.__version__ == "0.1.1"
     assert main(["--version"]) == 0
     captured = capsys.readouterr()
-    assert "0.1.0" in captured.out
+    assert "0.1.1" in captured.out
 
 
 def test_icon_generation(tmp_path):

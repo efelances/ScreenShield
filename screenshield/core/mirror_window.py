@@ -463,8 +463,6 @@ class MirrorWindow:
 
         if bg_brush:
             gdi32.DeleteObject(bg_brush)
-        if border_brush:
-            gdi32.DeleteObject(border_brush)
 
 
 class StaticZoneOverlayManager:

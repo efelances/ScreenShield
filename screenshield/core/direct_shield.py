@@ -12,7 +12,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import Path
 
-from screenshield.core.config import AppConfig, MaskStyle, PrivacyRule
+from screenshield.core.config import AppConfig, PrivacyRule
 from screenshield.core.mirror_engine import capture_window_image
 from screenshield.core.mirror_window import (
     BITMAPINFO,
@@ -61,6 +61,7 @@ SWP_HIDEWINDOW = 0x0080
 
 HWND_TOP = 0
 HWND_TOPMOST = -1
+HWND_NOTOPMOST = -2
 GW_HWNDPREV = 3
 GWL_EXSTYLE = -20
 LWA_ALPHA = 0x00000002
@@ -113,23 +114,6 @@ WINEVENTPROC = ctypes.WINFUNCTYPE(
     wintypes.DWORD,
     wintypes.DWORD,
 )
-
-
-class _ACCENT_POLICY(ctypes.Structure):
-    _fields_ = [
-        ("AccentState", ctypes.c_int),
-        ("AccentFlags", ctypes.c_int),
-        ("GradientColor", ctypes.c_uint32),
-        ("AnimationId", ctypes.c_int),
-    ]
-
-
-class _WINDOWCOMPOSITIONATTRIBDATA(ctypes.Structure):
-    _fields_ = [
-        ("Attribute", ctypes.c_int),
-        ("Data", ctypes.c_void_p),
-        ("SizeOfData", ctypes.c_size_t),
-    ]
 
 
 class _MONITORINFO(ctypes.Structure):
@@ -345,9 +329,9 @@ def expand_for_resizing(
     return expanded
 
 
-def _apply_window_blur_or_solid(hwnd: int, _style: MaskStyle) -> None:
-    """Keep direct overlays 100% opaque so zero pixels from behind ever bleed through."""
-    ctypes.windll.user32.SetLayeredWindowAttributes(wintypes.HWND(hwnd), 0, 255, LWA_ALPHA)
+def needs_clear_topmost(overlay_is_topmost: bool, target_wants_topmost: bool) -> bool:
+    """Return True when an overlay must be demoted via HWND_NOTOPMOST before normal Z-order."""
+    return overlay_is_topmost and not target_wants_topmost
 
 
 class DirectOverlayEngine:
@@ -701,11 +685,11 @@ class DirectOverlayEngine:
                 )
         if hdwp:
             user32.EndDeferWindowPos(hdwp)
-        self._active_map.clear()
         self._overlay_rects.clear()
         self._resizing_hwnds.clear()
         self._minimize_hold_until.clear()
         with self._lock:
+            self._active_map.clear()
             self._active_shields = 0
 
     def _sync_all(self) -> None:
@@ -780,9 +764,24 @@ class DirectOverlayEngine:
                 self._overlay_rects[overlay_hwnd] = rect_tuple
                 resized_overlays.append(overlay_hwnd)
 
+            is_resizing = t.hwnd in self._resizing_hwnds
+            target_ex = int(user32.GetWindowLongW(wintypes.HWND(t.hwnd), GWL_EXSTYLE))
+            target_wants_topmost = is_resizing or bool(target_ex & WS_EX_TOPMOST)
+            ov_ex = int(user32.GetWindowLongW(wintypes.HWND(overlay_hwnd), GWL_EXSTYLE))
+            if needs_clear_topmost(bool(ov_ex & WS_EX_TOPMOST), target_wants_topmost):
+                user32.SetWindowPos(
+                    wintypes.HWND(overlay_hwnd),
+                    wintypes.HWND(HWND_NOTOPMOST),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                )
+
             insert_after = (
                 wintypes.HWND(HWND_TOPMOST)
-                if t.hwnd in self._resizing_hwnds
+                if target_wants_topmost
                 else self._compute_insert_after(t.hwnd)
             )
 
@@ -821,8 +820,8 @@ class DirectOverlayEngine:
             user32.InvalidateRect(wintypes.HWND(ohwnd), None, False)
             user32.UpdateWindow(wintypes.HWND(ohwnd))
 
-        self._active_map = new_map
         with self._lock:
+            self._active_map = new_map
             self._active_shields = len(new_map)
             active_overlays = {self._pool_hwnds[i] for i in used_indices}
             for stale_ov in list(self._overlay_frost):
@@ -833,7 +832,8 @@ class DirectOverlayEngine:
     def _fast_move_single(self, target_hwnd: int) -> None:
         if target_hwnd in self._resizing_hwnds:
             return
-        pool_idx = self._active_map.get(target_hwnd)
+        with self._lock:
+            pool_idx = self._active_map.get(target_hwnd)
         if pool_idx is None:
             return
         t0 = time.perf_counter()
@@ -851,8 +851,25 @@ class DirectOverlayEngine:
         rect_tuple = (left, top, w, h)
         changed = self._overlay_rects.get(overlay_hwnd) != rect_tuple
         self._overlay_rects[overlay_hwnd] = rect_tuple
-        insert_after = self._compute_insert_after(target_hwnd)
         user32 = ctypes.windll.user32
+        target_ex = int(user32.GetWindowLongW(wintypes.HWND(target_hwnd), GWL_EXSTYLE))
+        target_wants_topmost = bool(target_ex & WS_EX_TOPMOST)
+        ov_ex = int(user32.GetWindowLongW(wintypes.HWND(overlay_hwnd), GWL_EXSTYLE))
+        if needs_clear_topmost(bool(ov_ex & WS_EX_TOPMOST), target_wants_topmost):
+            user32.SetWindowPos(
+                wintypes.HWND(overlay_hwnd),
+                wintypes.HWND(HWND_NOTOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            )
+        insert_after = (
+            wintypes.HWND(HWND_TOPMOST)
+            if target_wants_topmost
+            else self._compute_insert_after(target_hwnd)
+        )
         user32.SetWindowPos(
             wintypes.HWND(overlay_hwnd),
             insert_after,
@@ -986,6 +1003,9 @@ class DirectOverlayEngine:
 
         bg_brush = gdi32.CreateSolidBrush(0x00191B1C)      # #1C1B19
         border_brush = gdi32.CreateSolidBrush(0x00465C24)  # #245C46 (COLORREF 0x00BBGGRR)
+        overlay_font = gdi32.CreateFontW(20, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI")
+        panic_title_font = gdi32.CreateFontW(34, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI")
+        panic_sub_font = gdi32.CreateFontW(20, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI")
 
         def _overlay_wnd_proc(hwnd: int, msg: int, wparam: int, lparam: int) -> int:
             if msg == WM_ERASEBKGND:
@@ -1042,10 +1062,7 @@ class DirectOverlayEngine:
                         user32.FrameRect(hdc, ctypes.byref(frame_rc), border_brush)
                     label = self._overlay_labels.get(int(hwnd), "ScreenShield")
                     if (rc.right - rc.left) >= 120 and (rc.bottom - rc.top) >= 44:
-                        font = gdi32.CreateFontW(
-                            20, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI"
-                        )
-                        old_font = gdi32.SelectObject(hdc, font)
+                        old_font = gdi32.SelectObject(hdc, overlay_font)
                         gdi32.SetBkMode(hdc, TRANSPARENT_BK)
                         gdi32.SetTextColor(hdc, 0x00F0F5F7)  # #F7F5F0
                         text_rc = wintypes.RECT(rc.left + 12, rc.top + 8, rc.right - 12, rc.bottom - 8)
@@ -1057,7 +1074,6 @@ class DirectOverlayEngine:
                             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
                         )
                         gdi32.SelectObject(hdc, old_font)
-                        gdi32.DeleteObject(font)
                 finally:
                     user32.EndPaint(wintypes.HWND(hwnd), ctypes.byref(ps))
                 return 0
@@ -1076,10 +1092,7 @@ class DirectOverlayEngine:
                 self._apply_panic_curtain(bool(wparam))
                 return 0
             if msg == WM_APP_REFRESH_STYLE:
-                with self._lock:
-                    style = self._config.mask_style
                 for ohwnd in self._pool_hwnds:
-                    _apply_window_blur_or_solid(ohwnd, style)
                     user32.InvalidateRect(wintypes.HWND(ohwnd), None, False)
                 if self._panic_hwnd:
                     user32.InvalidateRect(wintypes.HWND(self._panic_hwnd), None, False)
@@ -1131,27 +1144,19 @@ class DirectOverlayEngine:
                     gdi32.SetBkMode(hdc, TRANSPARENT_BK)
                     gdi32.SetTextColor(hdc, 0x00F0F5F7)
 
-                    title_font = gdi32.CreateFontW(
-                        34, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI"
-                    )
-                    old_f = gdi32.SelectObject(hdc, title_font)
+                    old_f = gdi32.SelectObject(hdc, panic_title_font)
                     t_rc = wintypes.RECT(rc.left + 40, cy + 70, rc.right - 40, cy + 120)
                     user32.DrawTextW(
                         hdc, title, -1, ctypes.byref(t_rc), DT_CENTER | DT_SINGLELINE
                     )
                     gdi32.SelectObject(hdc, old_f)
-                    gdi32.DeleteObject(title_font)
 
-                    sub_font = gdi32.CreateFontW(
-                        20, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI"
-                    )
-                    old_sf = gdi32.SelectObject(hdc, sub_font)
+                    old_sf = gdi32.SelectObject(hdc, panic_sub_font)
                     s_rc = wintypes.RECT(rc.left + 40, cy + 124, rc.right - 40, cy + 164)
                     user32.DrawTextW(
                         hdc, subtitle, -1, ctypes.byref(s_rc), DT_CENTER | DT_SINGLELINE
                     )
                     gdi32.SelectObject(hdc, old_sf)
-                    gdi32.DeleteObject(sub_font)
                 finally:
                     user32.EndPaint(wintypes.HWND(hwnd), ctypes.byref(ps))
                 return 0
@@ -1196,9 +1201,6 @@ class DirectOverlayEngine:
         if self._msg_hwnd:
             self._own_hwnds.add(self._msg_hwnd)
 
-        with self._lock:
-            initial_style = self._config.mask_style
-
         for idx in range(POOL_SIZE):
             ohwnd = user32.CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_LAYERED,
@@ -1216,7 +1218,7 @@ class DirectOverlayEngine:
             )
             if ohwnd:
                 h_int = int(ohwnd)
-                _apply_window_blur_or_solid(h_int, initial_style)
+                user32.SetLayeredWindowAttributes(wintypes.HWND(h_int), 0, 255, LWA_ALPHA)
                 self._pool_hwnds.append(h_int)
                 self._own_hwnds.add(h_int)
 
@@ -1251,5 +1253,6 @@ class DirectOverlayEngine:
                 user32.DestroyWindow(wintypes.HWND(h_int))
         self._pool_hwnds.clear()
         self._own_hwnds.clear()
-        gdi32.DeleteObject(bg_brush)
-        gdi32.DeleteObject(border_brush)
+        for gdi_obj in (bg_brush, border_brush, overlay_font, panic_title_font, panic_sub_font):
+            if gdi_obj:
+                gdi32.DeleteObject(gdi_obj)

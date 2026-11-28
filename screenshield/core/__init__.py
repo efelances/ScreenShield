@@ -7,6 +7,7 @@ from screenshield.core.direct_shield import (
     DirectOverlayEngine,
     ShieldTarget,
     compute_shield_targets,
+    needs_clear_topmost,
 )
 from screenshield.core.focus_assist import FocusAssistController, WindowAnimationController
 from screenshield.core.privacy_mask import SafetyRingBuffer, apply_normalized_zones, apply_region_mask, render_curtain
@@ -30,5 +31,6 @@ __all__ = [
     "apply_region_mask",
     "compute_shield_targets",
     "detect_secrets",
+    "needs_clear_topmost",
     "render_curtain",
 ]

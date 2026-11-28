@@ -213,7 +213,8 @@ class ConfigStore:
                 cfg = AppConfig.model_validate(raw)
                 if not cfg.rules and "rules" not in raw:
                     cfg.rules = default_privacy_rules()
-                return cfg
+                # Never reuse stale OS HWNDs across sessions.
+                return cfg.model_copy(update={"allowlist_hwnds": [], "blocked_hwnds": []})
             except Exception:
                 cfg = AppConfig(rules=default_privacy_rules())
                 self.save(cfg)
@@ -222,7 +223,8 @@ class ConfigStore:
     def save(self, config: AppConfig) -> AppConfig:
         """Persist configuration atomically via a temporary file."""
         with self._lock:
-            payload = json.dumps(config.model_dump(mode="json"), indent=2, ensure_ascii=False)
+            data = config.model_dump(mode="json", exclude={"allowlist_hwnds", "blocked_hwnds"})
+            payload = json.dumps(data, indent=2, ensure_ascii=False)
             tmp_path = self.config_path.with_suffix(".json.tmp")
             tmp_path.write_text(payload, encoding="utf-8")
             os.replace(tmp_path, self.config_path)

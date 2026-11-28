@@ -8,6 +8,7 @@ from screenshield.core.direct_shield import (
     ShieldTarget,
     compute_shield_targets,
     expand_for_resizing,
+    needs_clear_topmost,
 )
 from screenshield.core.window_watcher import WindowInfo
 
@@ -96,3 +97,10 @@ def test_expand_for_resizing_expands_only_active_resizing_target():
     expanded = expand_for_resizing([t1, t2], {10}, {10: (0, 0, 1920, 1032)})
     assert expanded[0].rect == (0, 0, 1920, 1032)
     assert expanded[1].rect == (600, 200, 900, 500)
+
+
+def test_needs_clear_topmost():
+    assert needs_clear_topmost(True, False) is True
+    assert needs_clear_topmost(True, True) is False
+    assert needs_clear_topmost(False, False) is False
+    assert needs_clear_topmost(False, True) is False

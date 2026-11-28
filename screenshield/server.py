@@ -17,6 +17,7 @@ from screenshield.core.controller import ShieldController
 
 
 SESSION_COOKIE_NAME = "screenshield_session"
+CSRF_HEADER_NAME = "x-screenshield-csrf"
 _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _ALLOWED_LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 
@@ -72,14 +73,21 @@ def _is_valid_local_origin(origin: str, request_port: int | None) -> bool:
     return True
 
 
-def _is_valid_local_host_header(host_header: str) -> bool:
+def _is_valid_local_host_header(host_header: str, *, allow_test_host: bool = False) -> bool:
     if not host_header:
         return True
     host_only = host_header.split(":")[0].strip().lower()
-    return host_only in _ALLOWED_LOCAL_HOSTS or host_only == "testserver"
+    if host_only in _ALLOWED_LOCAL_HOSTS:
+        return True
+    return allow_test_host and host_only == "testserver"
 
 
-def create_app(controller: ShieldController, auth: AuthState | None = None) -> FastAPI:
+def create_app(
+    controller: ShieldController,
+    auth: AuthState | None = None,
+    *,
+    allow_test_host: bool = False,
+) -> FastAPI:
     """Build the configured FastAPI application bound to a ShieldController."""
     auth_state = auth or AuthState()
     app = FastAPI(title="ScreenShield Local API", docs_url=None, redoc_url=None, openapi_url=None)
@@ -89,7 +97,7 @@ def create_app(controller: ShieldController, auth: AuthState | None = None) -> F
     @app.middleware("http")
     async def security_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
         host_header = request.headers.get("host", "")
-        if not _is_valid_local_host_header(host_header):
+        if not _is_valid_local_host_header(host_header, allow_test_host=allow_test_host):
             return JSONResponse({"detail": "Invalid local host"}, status_code=403)
 
         path = request.url.path
@@ -99,6 +107,8 @@ def create_app(controller: ShieldController, auth: AuthState | None = None) -> F
                 return JSONResponse({"detail": "Unauthorized"}, status_code=401)
 
             if request.method in _MUTATING_METHODS:
+                if request.headers.get(CSRF_HEADER_NAME) != "1":
+                    return JSONResponse({"detail": "Missing CSRF header"}, status_code=403)
                 origin = request.headers.get("origin")
                 if origin is not None and not _is_valid_local_origin(origin, request.url.port):
                     return JSONResponse({"detail": "Cross-origin request blocked"}, status_code=403)

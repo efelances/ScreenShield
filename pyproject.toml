@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "screenshield"
-version = "0.1.0"
+version = "0.1.1"
 description = "100% offline live privacy shield for screen sharing, streaming, and recording on Windows."
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115.0",

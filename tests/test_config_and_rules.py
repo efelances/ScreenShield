@@ -24,6 +24,8 @@ def test_config_store_defaults_and_roundtrip(tmp_path):
             "direct_padding_px": 8,
             "buffer_delay_ms": 200,
             "high_contrast": True,
+            "allowlist_hwnds": [111, 222],
+            "blocked_hwnds": [333, 444],
         }
     )
     store.save(updated)
@@ -35,6 +37,9 @@ def test_config_store_defaults_and_roundtrip(tmp_path):
     assert reloaded.direct_padding_px == 8
     assert reloaded.buffer_delay_ms == 200
     assert reloaded.high_contrast is True
+    # Ephemeral OS window handles must never persist across restarts.
+    assert reloaded.allowlist_hwnds == []
+    assert reloaded.blocked_hwnds == []
 
 
 def test_window_rule_matching():

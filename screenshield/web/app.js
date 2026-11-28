@@ -7,6 +7,14 @@
     monitors: [],
     lang: "tr",
     activeTab: "shield",
+    snapshots: {
+      directWindows: "",
+      allowlistWindows: "",
+      monitors: "",
+      rules: "",
+      zones: "",
+      alerts: "",
+    },
   };
 
   function t(key) {
@@ -28,7 +36,7 @@
   }
 
   async function api(path, options = {}) {
-    const headers = Object.assign({}, options.headers || {});
+    const headers = Object.assign({ "X-ScreenShield-CSRF": "1" }, options.headers || {});
     if (options.body && typeof options.body !== "string") {
       headers["Content-Type"] = "application/json";
       options.body = JSON.stringify(options.body);
@@ -110,10 +118,14 @@
     document.getElementById("shieldMirrorBtn").classList.toggle("active", !isDirect);
     document.getElementById("paddingRow").classList.toggle("hidden", !isDirect);
     document.getElementById("bufferRow").classList.toggle("hidden", isDirect);
-    document.getElementById("paddingRange").value = cfg.direct_padding_px ?? 4;
-    document.getElementById("paddingVal").textContent = `${cfg.direct_padding_px ?? 4} px`;
-    document.getElementById("bufferDelayRange").value = cfg.buffer_delay_ms;
-    document.getElementById("bufferDelayVal").textContent = `${cfg.buffer_delay_ms} ms`;
+    if (document.activeElement?.id !== "paddingRange") {
+      document.getElementById("paddingRange").value = cfg.direct_padding_px ?? 4;
+      document.getElementById("paddingVal").textContent = `${cfg.direct_padding_px ?? 4} px`;
+    }
+    if (document.activeElement?.id !== "bufferDelayRange") {
+      document.getElementById("bufferDelayRange").value = cfg.buffer_delay_ms;
+      document.getElementById("bufferDelayVal").textContent = `${cfg.buffer_delay_ms} ms`;
+    }
     document.getElementById("contrastToggleChk").checked = Boolean(cfg.high_contrast);
     document.getElementById("hideControlChk").checked = Boolean(cfg.hide_control_from_capture);
     document.getElementById("clipboardGuardChk").checked = Boolean(cfg.clipboard_guard_enabled);
@@ -121,9 +133,18 @@
   }
 
   function renderDirectWindows() {
+    const blockedArr = (state.app?.config?.blocked_hwnds) || [];
+    const snap = JSON.stringify({
+      lang: state.lang,
+      blocked: blockedArr,
+      windows: state.windows.map((w) => [w.hwnd, w.title, w.process_name, w.sensitive, w.shielded]),
+    });
+    if (snap === state.snapshots.directWindows) return;
+    state.snapshots.directWindows = snap;
+
     const container = document.getElementById("directWindowsList");
     container.innerHTML = "";
-    const blockedSet = new Set((state.app?.config?.blocked_hwnds) || []);
+    const blockedSet = new Set(blockedArr);
     let sensitiveCount = 0;
 
     state.windows.forEach((win) => {
@@ -196,9 +217,17 @@
   }
 
   function renderAllowlistWindows() {
+    const allowArr = (state.app?.config?.allowlist_hwnds) || [];
+    const snap = JSON.stringify({
+      allow: allowArr,
+      windows: state.windows.map((w) => [w.hwnd, w.title, w.sensitive]),
+    });
+    if (snap === state.snapshots.allowlistWindows) return;
+    state.snapshots.allowlistWindows = snap;
+
     const container = document.getElementById("windowsList");
     container.innerHTML = "";
-    const allowset = new Set((state.app?.config?.allowlist_hwnds) || []);
+    const allowset = new Set(allowArr);
 
     state.windows.forEach((win) => {
       const row = document.createElement("div");
@@ -230,9 +259,13 @@
   }
 
   function renderMonitors() {
+    const selectedIdx = state.app?.config?.monitor_index || 1;
+    const snap = JSON.stringify({ selectedIdx, monitors: state.monitors });
+    if (snap === state.snapshots.monitors) return;
+    state.snapshots.monitors = snap;
+
     const container = document.getElementById("monitorsList");
     container.innerHTML = "";
-    const selectedIdx = state.app?.config?.monitor_index || 1;
     state.monitors.forEach((mon) => {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -247,9 +280,13 @@
   }
 
   function renderRules() {
+    const rules = state.app?.config?.rules || [];
+    const snap = JSON.stringify({ lang: state.lang, rules });
+    if (snap === state.snapshots.rules) return;
+    state.snapshots.rules = snap;
+
     const container = document.getElementById("rulesList");
     container.innerHTML = "";
-    const rules = state.app?.config?.rules || [];
 
     rules.forEach((rule) => {
       const row = document.createElement("div");
@@ -298,12 +335,15 @@
   }
 
   function renderZones() {
+    const zones = state.app?.config?.zones || [];
+    const snap = JSON.stringify({ lang: state.lang, zones });
+    if (snap === state.snapshots.zones) return;
+    state.snapshots.zones = snap;
+
     const canvas = document.getElementById("zoneCanvas");
     canvas.querySelectorAll(".zone-box").forEach((n) => n.remove());
     const list = document.getElementById("zonesList");
     list.innerHTML = "";
-
-    const zones = state.app?.config?.zones || [];
     if (!zones.length) {
       const empty = document.createElement("div");
       empty.className = "hint-text";
@@ -380,9 +420,13 @@
       el.textContent = ok ? t("hk_ok") : t("hk_fail");
     });
 
+    const alerts = state.app.clipboard_alerts || [];
+    const alertsSnap = JSON.stringify({ lang: state.lang, alerts });
+    if (alertsSnap === state.snapshots.alerts) return;
+    state.snapshots.alerts = alertsSnap;
+
     const alertsList = document.getElementById("clipboardAlertsList");
     alertsList.innerHTML = "";
-    const alerts = state.app.clipboard_alerts || [];
     if (!alerts.length) {
       const empty = document.createElement("div");
       empty.className = "hint-text";
@@ -671,6 +715,17 @@
         // Ignore transient poll errors during shutdown.
       }
     }, 1000);
+
+    setInterval(async () => {
+      if (state.activeTab !== "shield") return;
+      try {
+        await refreshWindows();
+        renderDirectWindows();
+        renderAllowlistWindows();
+      } catch (_err) {
+        // Ignore transient poll errors.
+      }
+    }, 3000);
 
     setInterval(() => {
       if (!state.app) return;

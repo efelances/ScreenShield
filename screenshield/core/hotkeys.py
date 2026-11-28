@@ -49,6 +49,48 @@ _SPECIAL_KEYS = {
 }
 
 
+def _setup_hotkey_win32_signatures() -> None:
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+
+    kernel32.GetCurrentThreadId.argtypes = []
+    kernel32.GetCurrentThreadId.restype = wintypes.DWORD
+
+    user32.RegisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT]
+    user32.RegisterHotKey.restype = wintypes.BOOL
+
+    user32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.UnregisterHotKey.restype = wintypes.BOOL
+
+    user32.PeekMessageW.argtypes = [
+        ctypes.POINTER(wintypes.MSG),
+        wintypes.HWND,
+        wintypes.UINT,
+        wintypes.UINT,
+        wintypes.UINT,
+    ]
+    user32.PeekMessageW.restype = wintypes.BOOL
+
+    user32.GetMessageW.argtypes = [
+        ctypes.POINTER(wintypes.MSG),
+        wintypes.HWND,
+        wintypes.UINT,
+        wintypes.UINT,
+    ]
+    user32.GetMessageW.restype = ctypes.c_int
+
+    user32.PostThreadMessageW.argtypes = [
+        wintypes.DWORD,
+        wintypes.UINT,
+        wintypes.WPARAM,
+        wintypes.LPARAM,
+    ]
+    user32.PostThreadMessageW.restype = wintypes.BOOL
+
+
+_setup_hotkey_win32_signatures()
+
+
 def parse_hotkey(combo: str) -> tuple[int, int]:
     """Parse a human-readable hotkey string like 'Ctrl+Alt+H' into (modifiers, vk)."""
     if not combo or not combo.strip():
